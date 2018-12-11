@@ -22,6 +22,9 @@
 ;; on a single physical line.  There is no feature around this. :-)
 (define *pp-display-elements* 12)
 
+(define (atom? x)
+  (and (not (null? x))
+       (not (pair? x))))
 
 ;;; print n spaces
 (define (spaces n)
