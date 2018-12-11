@@ -1,0 +1,9 @@
+# make generated files
+lemon
+yocto
+yocto-lexer.c
+yocto-parser.c
+yocto-parser.h
+
+# random scheme files
+*.scm
