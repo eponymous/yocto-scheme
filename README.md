@@ -1,5 +1,4 @@
 ## Yocto Scheme
----------------
 
 An over-engineered port of MiniScheme aiming for R4RS compliance but mostly
 just a playground to learn how to put together a working lexer/parser stack.
@@ -10,21 +9,21 @@ just a playground to learn how to put together a working lexer/parser stack.
 
 ### Credits
 
-  Mini-Scheme Interpreter Version 0.85
+    Mini-Scheme Interpreter Version 0.85
+    
+    coded by Atsushi Moriwaki (11/5/1989)
+    E-MAIL :  moriwaki@kurims.kurims.kyoto-u.ac.jp
+    This version has been modified by R.C. Secrist.
   
-  coded by Atsushi Moriwaki (11/5/1989)
-  E-MAIL :  moriwaki@kurims.kurims.kyoto-u.ac.jp
-  This version has been modified by R.C. Secrist.
+    Mini-Scheme is now maintained by Akira KIDA.
 
-  Mini-Scheme is now maintained by Akira KIDA.
+    This is a revised and modified version by Akira KIDA.
+    current version is 0.85k4 (15 May 1994)
 
-  This is a revised and modified version by Akira KIDA.
-  current version is 0.85k4 (15 May 1994)
-
-  THIS SOFTWARE IS IN THE PUBLIC DOMAIN
+    THIS SOFTWARE IS IN THE PUBLIC DOMAIN
   
-  This software is completely free to copy, modify and/or re-distribute.
-  But I would appreciate it if you left my name on the code as the author.
+    This software is completely free to copy, modify and/or re-distribute.
+    But I would appreciate it if you left my name on the code as the author.
 
 Some (a lot of) code ported from TinyScheme
 
