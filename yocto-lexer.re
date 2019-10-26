@@ -114,8 +114,29 @@ yy0:
     ",@"                 { return TOK_UNQUOTESP; }
     "#("                 { return TOK_VECTOR;    }
 
-    "#t" | "#true"       { *value = T;  return TOK_BOOLEAN; }
-    "#f" | "#false"      { *value = F;  return TOK_BOOLEAN; }
+    "=>"                 { *value = mk_symbol("=>");                                   return TOK_SYMBOL; }
+    "and"                { *value = mk_symbol("and");                                  return TOK_SYMBOL; }
+    "begin"              { *value = mk_symbol("begin");                                return TOK_SYMBOL; }
+    "case"               { *value = mk_symbol("case");                                 return TOK_SYMBOL; }
+    "cond"               { *value = mk_symbol("cond");                                 return TOK_SYMBOL; }
+    "define"             { *value = mk_symbol("define");                               return TOK_SYMBOL; }
+    "delay"              { *value = mk_symbol("delay");                                return TOK_SYMBOL; }
+    "do"                 { *value = mk_symbol("do");                                   return TOK_SYMBOL; }
+    "else"               { *value = mk_symbol("else");                                 return TOK_SYMBOL; }
+    "if"                 { *value = mk_symbol("if");                                   return TOK_SYMBOL; }
+    "lambda"             { *value = mk_symbol("lambda");                               return TOK_SYMBOL; }
+    "let"                { *value = mk_symbol("let");                                  return TOK_SYMBOL; }
+    "let*"               { *value = mk_symbol("let*");                                 return TOK_SYMBOL; }
+    "letrec"             { *value = mk_symbol("letrec");                               return TOK_SYMBOL; }
+    "or"                 { *value = mk_symbol("or");                                   return TOK_SYMBOL; }
+    "quasiquote"         { *value = mk_symbol("quasiquote");                           return TOK_SYMBOL; }
+    "quote"              { *value = mk_symbol("quote");                                return TOK_SYMBOL; }
+    "set!"               { *value = mk_symbol("set!");                                 return TOK_SYMBOL; }
+    "unquote"            { *value = mk_symbol("unquote");                              return TOK_SYMBOL; }
+    "unquote-splicing"   { *value = mk_symbol("unquote-splicing");                     return TOK_SYMBOL; }
+
+    "#t" | "#true"       { *value = T;                                                 return TOK_BOOLEAN; }
+    "#f" | "#false"      { *value = F;                                                 return TOK_BOOLEAN; }
 
     '#\\alarm'           { *value = mk_character(0x07);                                return TOK_CHARACTER; }
     '#\\backspace'       { *value = mk_character(0x08);                                return TOK_CHARACTER; }
