@@ -179,7 +179,7 @@
                     ,@(map (lambda (x)
                              (if (and (pair? x) (cdr x))
                                (car (cdr x))
-                               nil))
+                               ()))
                         `,vars)))))
       do-macro)))
 
