@@ -32,7 +32,7 @@ extern cell *UNQUOTE;
 extern cell *UNQUOTESP;
 }
 
-start               ::= datums(e).                            { *result = e; }
+expr                ::= datums(e).                            { *result = e; }
 
 datums(lhs)         ::= datum(e).                             { lhs = cons(e, NIL); }
 datums(lhs)         ::= datums(a) datum(b).                   { lhs = list_append(a, cons(b, NIL)); }
@@ -54,10 +54,10 @@ list(lhs)           ::= LPAREN datums(e) RPAREN.              { lhs = e; }
 list(lhs)           ::= LPAREN datums(a) DOT datum(b) RPAREN. { lhs = list_append(a, b); }
 list(lhs)           ::= abbrev_prefix(a) datum(b).            { lhs = cons(a, cons(b, NIL)); }
 
-abbrev_prefix(lhs)  ::= QUOTE.                                { lhs = QUOTE; }
-abbrev_prefix(lhs)  ::= QQUOTE.                               { lhs = QQUOTE; }
-abbrev_prefix(lhs)  ::= UNQUOTE.                              { lhs = UNQUOTE; }
-abbrev_prefix(lhs)  ::= UNQUOTESP.                            { lhs = UNQUOTESP; }
+abbrev_prefix(lhs)  ::= SQUOTE.                               { lhs = QUOTE; }
+abbrev_prefix(lhs)  ::= BACKQUOTE.                            { lhs = QQUOTE; }
+abbrev_prefix(lhs)  ::= COMMA.                                { lhs = UNQUOTE; }
+abbrev_prefix(lhs)  ::= COMMA_AT.                             { lhs = UNQUOTESP; }
 
 vector(lhs)         ::= VECTOR RPAREN.                        { lhs = mk_vector(0, NIL); }
 vector(lhs)         ::= VECTOR datums(e) RPAREN.              { lhs = mk_vector(list_length(e), e); }

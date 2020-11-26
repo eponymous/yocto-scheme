@@ -171,6 +171,15 @@ void Parse(void*, int, cell*, cell**);
 void *ParseAlloc(void *(*mallocProc)(size_t));
 void ParseFree(void *, void (*freeProc)(void*));
 
+char is_interactive;
+
+char *line;    /* input buffer */
+
+FILE *infp;    /* input file */
+FILE *outfp;   /* output file */
+
+char strbuf[LINESIZE];
+
 /* ========== garbage collector ========== */
 
 /*--
@@ -2996,8 +3005,6 @@ void fatal_error(const char *msg)
 
 static void init_vars_global()
 {
-    cell *x;
-
     /* init input/output file */
     infp = stdin;
     outfp = stdout;
@@ -3019,8 +3026,7 @@ static void init_vars_global()
     global_env = cons(NIL, NIL);
 
     /* init else */
-    x = mk_symbol("else");
-    car(global_env) = cons(cons(x, T), car(global_env));
+    car(global_env) = cons(cons(mk_symbol("else"), T), car(global_env));
 
     parser = ParseAlloc(malloc);
 }

@@ -30,8 +30,6 @@
 #define LINESIZE 4096
 #endif
 
-char strbuf[LINESIZE];
-
 /* cell structure */
 typedef struct cell {
     unsigned short _flag;
@@ -69,26 +67,14 @@ int list_length(cell*);
 void error(const char *);
 void fatal_error(const char *);
 
-char *line;    /* input buffer */
+extern char strbuf[LINESIZE];;
 
-FILE *infp;    /* input file */
-FILE *outfp;   /* output file */
+extern char *line;    /* input buffer */
 
-char is_interactive;
-/*
-typedef enum {
-    TOK_EOF,
-    TOK_LPAREN,
-    TOK_RPAREN,
-    TOK_DOT,
-    TOK_ATOM,
-    TOK_QUOTE,
-    TOK_BQUOTE,
-    TOK_COMMA,
-    TOK_ATMARK,
-    TOK_VECTOR,
-} token;
-*/
+extern FILE *infp;    /* input file */
+extern FILE *outfp;   /* output file */
+
+extern char is_interactive;
 
 int lex(cell**);
 void clearinput();

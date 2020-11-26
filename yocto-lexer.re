@@ -108,10 +108,10 @@ yy0:
     "("                  { return TOK_LPAREN;    }
     ")"                  { return TOK_RPAREN;    }
     "."                  { return TOK_DOT;       }
-    "'"                  { return TOK_QUOTE;     }
-    "`"                  { return TOK_QQUOTE;    }
-    ","                  { return TOK_UNQUOTE;   }
-    ",@"                 { return TOK_UNQUOTESP; }
+    "'"                  { return TOK_SQUOTE;    }
+    "`"                  { return TOK_BACKQUOTE; }
+    ","                  { return TOK_COMMA;     }
+    ",@"                 { return TOK_COMMA_AT;  }
     "#("                 { return TOK_VECTOR;    }
 
     "=>"                 { *value = mk_symbol("=>");                                   return TOK_SYMBOL; }
