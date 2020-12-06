@@ -20,10 +20,12 @@
 
 #include <stdio.h>
 
+#include "str/str.h"
+
 /* #define VERBOSE */   /* define this if you want verbose GC */
 
 #ifndef PROMPT
-#define PROMPT "> "
+#define PROMPT ">> "
 #endif
 
 #ifndef LINESIZE
@@ -33,15 +35,12 @@
 /* cell structure */
 typedef struct cell {
     unsigned short _flag;
+    unsigned short _op;
     union {
         struct {
             struct cell *_car;
             struct cell *_cdr;
         } _cons;
-        struct {
-            char *_svalue;
-            short _keynum;
-        } _string;
         struct {
             long   _ivalue;
             double _rvalue;
@@ -50,6 +49,7 @@ typedef struct cell {
             char _in;
             FILE *_file;
         } _port;
+        str _string;
     };
 } cell;
 
@@ -67,9 +67,7 @@ int list_length(cell*);
 void error(const char *);
 void fatal_error(const char *);
 
-extern char strbuf[LINESIZE];;
-
-extern char *line;    /* input buffer */
+extern char strbuf[LINESIZE];
 
 extern FILE *infp;    /* input file */
 extern FILE *outfp;   /* output file */

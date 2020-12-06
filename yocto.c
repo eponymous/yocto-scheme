@@ -31,8 +31,6 @@
 
 #define CELL_SEGSIZE    4096    /* # of cells in one segment */
 #define CELL_NSEGMENT   512     /* # of segments for cells */
-#define STR_SEGSIZE     4096    /* bytes of one string segment */
-#define STR_NSEGMENT    100     /* # of segments for strings */
 
 #define InitFile "init.scm"
 #define FIRST_CELLSEGS 10
@@ -62,7 +60,8 @@
 #define type(p)           ((p)->_flag)
 
 #define isstring(p)       (type(p) & T_STRING)
-#define strvalue(p)       ((p)->_string._svalue)
+#define string(p)         ((p)->_string)
+#define strvalue(p)       str_ptr(((p)->_string))
 #define keynum(p)         ((p)->_string._keynum)
 
 #define isnumber(p)       (type(p) & T_EXACT || type(p) & T_INEXACT)
@@ -88,7 +87,7 @@
 #define issyntax(p)       (type(p) & T_SYNTAX)
 #define isproc(p)         (type(p) & T_PROC)
 #define syntaxname(p)     strvalue(car(p))
-#define syntaxnum(p)      keynum(car(p))
+#define syntaxnum(p)      car(p)->_op
 #define procnum(p)        ivalue(p)
 
 #define isclosure(p)      (type(p) & T_CLOSURE)
@@ -131,8 +130,6 @@
 /* arrays for segments */
 static cell *cell_seg[CELL_NSEGMENT];
 static int   last_cell_seg = -1;
-static char *str_seg[STR_NSEGMENT];
-static int   str_seglast = -1;
 
 /* We use 4 registers. */
 static cell *args;                            /* register for arguments of function */
@@ -149,6 +146,7 @@ cell *T = &_T;                                /* special cell representing #t */
 static cell _F;
 cell *F = &_F;                                /* special cell representing #f */
 static cell *oblist = &_NIL;                  /* pointer to symbol table */
+static cell *strlist = &_NIL;                 /* pointer to string list */
 static cell *global_env;                      /* pointer to global environment */
 
 cell *QUOTE;                                  /* pointer to symbol quote */
@@ -172,8 +170,6 @@ void *ParseAlloc(void *(*mallocProc)(size_t));
 void ParseFree(void *, void (*freeProc)(void*));
 
 char is_interactive;
-
-char *line;    /* input buffer */
 
 FILE *infp;    /* input file */
 FILE *outfp;   /* output file */
@@ -248,10 +244,11 @@ static void gc(cell *a, cell *b)
     long j;
 
     if (gc_verbose)
-        printf("gc...");
+        printf("gc...\n");
 
     /* mark system globals */
     mark(oblist);
+    mark(strlist);
     mark(global_env);
 
     /* mark current registers */
@@ -321,66 +318,26 @@ static int alloc_cellseg(int n)
     return n;
 }
 
-/* allocate new string segment */
-static int alloc_strseg(int n)
-{
-    char *p;
-    long i;
-    int k;
-
-    for (k = 0; k < n; k++) {
-        if (str_seglast >= STR_NSEGMENT)
-            return k;
-        p = (char *) malloc(STR_SEGSIZE * sizeof(char));
-        if (p == NULL)
-            return k;
-        str_seg[++str_seglast] = p;
-        for (i = 0; i < STR_SEGSIZE; i++)
-            *p++ = (char) (-1);
-    }
-    return n;
-}
-
-/* allocate name to string area */
-static char *store_string(const char *name, int len)
-{
-    char *q = *str_seg;
-    short i;
-    long remain;
-
-    len += 2; /* reserve space for NULL byte and end of string marker */
-
-    /* first check name has already listed */
-    for (i = 0; i <= str_seglast; i++) {
-        for (q = str_seg[i]; *q != (char) (-1); ) {
-            if (name != NULL && !strcmp(q, name))
-                return q;
-            while (*q++); /* get next string */
-        }
-    }
-
-    remain = (long)STR_SEGSIZE - ((long)q - (long)str_seg[str_seglast]);
-
-    if (remain < len) {
-        if (!alloc_strseg(1))
-            fatal_error("run out of string area");
-        q = str_seg[str_seglast];
-    }
-
-    if (name != NULL)
-        strcpy(q, name);
-
-    return q;
-}
-
 /* search objlist by name */
 static cell *oblist_get_name(const char *name)
 {
     cell *x;
 
     for (x = oblist; x != NIL; x = cdr(x))
-        if (!strcmp(name, symname(car(x))))
+        if (str_eq(str_ref(name), string(caar(x))))
             return x;
+
+    return NIL;
+}
+
+/* search strlist by name */
+static cell *strlist_get_name(const char *name)
+{
+    cell *x;
+
+    for (x = strlist; x != NIL; x = cdr(x))
+        if (str_eq(str_ref(name), string(car(x))))
+            return car(x);
 
     return NIL;
 }
@@ -571,31 +528,32 @@ cell *mk_character(char c)
 }
 
 /* get new string */
-cell *mk_string(const char *str)
+cell *mk_string(const char *s)
 {
-    cell *x = get_cell(NIL, NIL);
+    cell *x = strlist_get_name(s);
 
-    strvalue(x) = store_string(str, strlen(str));
-    type(x) = (T_STRING | T_ATOM);
-    keynum(x) = (short) (-1);
-    return x;
+    if (x != NIL) {
+        return x;
+    } else {
+        x = get_cell(NIL, NIL);
+
+        str_cpy(&string(x), str_ref(s));
+        type(x) = (T_STRING | T_ATOM);
+        strlist = cons(x, strlist);
+        return x;
+    }
 }
 
 /* len is the length for the empty string in characters */
 static cell *mk_empty_string(int len, char fill)
 {
     int i;
-    cell *x = get_cell(NIL, NIL);
-    char *p = store_string(NULL, len);
 
     for (i = 0; i < len; i++)
-        p[i] = fill;
-    p[len] = '\0';
+        strbuf[i] = fill;
+    strbuf[len] = '\0';
 
-    strvalue(x) = p;
-    type(x) = (T_STRING | T_ATOM);
-    keynum(x) = (short) (-1);
-    return x;
+    return mk_string(strbuf);
 }
 
 /* get new symbol */
@@ -603,9 +561,9 @@ cell *mk_symbol(const char *name)
 {
     cell *x = oblist_get_name(name);
 
-    if (x != NIL)
+    if (x != NIL) {
         return car(x);
-    else {
+    } else {
         x = cons(mk_string(name), NIL);
         type(x) = T_SYMBOL;
         oblist = cons(x, oblist);
@@ -710,69 +668,71 @@ static void strunquote(char *p, const char *s)
 /* print atoms */
 static int printatom(cell *l, int f)
 {
-    char *p;
+    str p;
     
     if (l == NIL) {
-        p = "()";
+        p = str_lit("()");
     } else if (l == T) {
-        p = "#t";
+        p = str_lit("#t");
     } else if (l == F) {
-        p = "#f";
+        p = str_lit("#f");
     } else if (isexact(l)) {
-        p = strbuf;
-        sprintf(p, "%ld", ivalue(l));
+        sprintf(strbuf, "%ld", ivalue(l));
+        p = str_ref(strbuf);
     } else if (isinexact(l)) {
-        p = strbuf;
-        sprintf(p, "%f", rvalue(l));
+        sprintf(strbuf, "%f", rvalue(l));
+        p = str_ref(strbuf);
     } else if (isstring(l)) {
         if (!f) {
-            p = strvalue(l);
+            p = string(l);
         } else {
-            p = strbuf;
-            strunquote(p, strvalue(l));
+            strunquote(strbuf, strvalue(l));
+            p = str_ref(strbuf);
         }
     } else if (ischar(l)) {
         char c = cvalue(l);
-        p = strbuf;
         if (!f) {
-            p[0] = c;
-            p[1] = 0;
+            strbuf[0] = c;
+            strbuf[1] = 0;
+            p = str_ref(strbuf);
         } else {
             switch (c) {
                 case 0x07:
-                    p = "#\\alarm";
+                    p = str_lit("#\\alarm");
                     break;
                 case 0x08:
-                    p = "#\\backspace";
+                    p = str_lit("#\\backspace");
                     break;
                 case 0x5f:
-                    p = "#\\delete";
+                    p = str_lit("#\\delete");
                     break;
                 case 0x1b:
-                    p = "#\\escape";
+                    p = str_lit("#\\escape");
                     break;
                 case 0x0a:
-                    p = "#\\newline";
+                    p = str_lit("#\\newline");
                     break;
                 case 0x00:
-                    p = "#\\null";
+                    p = str_lit("#\\null");
                     break;
                 case 0x0d:
-                    p = "#\\return";
+                    p = str_lit("#\\return");
                     break;
                 case 0x20:
-                    p = "#\\space";
+                    p = str_lit("#\\space");
                     break;
                 case 0x09:
-                    p = "#\\tab";
+                    p = str_lit("#\\tab");
                     break;
                 default:
-                    sprintf(p, "#\\%c", c);
+                    sprintf(strbuf, "#\\%c", c);
+                    p = str_ref(strbuf);
                     break;
             }
+
         }
     } else if (issymbol(l)) {
-        p = symname(l);
+        p = str_ref(string(car(l)));
     } else if (isproc(l)) {
         cell *x = car(global_env);
         while(x != NIL) {
@@ -783,30 +743,30 @@ static int printatom(cell *l, int f)
             x = cdr(x);
         }
         if (x != NIL) {
-            p = symname(x);
+            p = string(car(x));
         } else {
-            p = strbuf;
-            sprintf(p, "#<PROCEDURE %ld>", procnum(l));
+            sprintf(strbuf, "#<PROCEDURE %ld>", procnum(l));
+            p = str_ref(strbuf);
         }
     } else if (ismacro(l)) {
-        p = "#<MACRO>";
+        p = str_lit("#<MACRO>");
     } else if (isclosure(l)) {
-        p = "#<CLOSURE>";
+        p = str_lit("#<CLOSURE>");
     } else if (iscontinuation(l)) {
-        p = "#<CONTINUATION>";
+        p = str_lit("#<CONTINUATION>");
     } else if (isport(l) && isinput(l)) {
-        p = "#<INPUT PORT>";
+        p = str_lit("#<INPUT PORT>");
     } else if (isport(l) && !isinput(l)) {
-        p = "#<OUTPUT PORT>";
+        p = str_lit("#<OUTPUT PORT>");
     } else {
         error("load -- argument is not string");
         return 0;
     }
 
     if (f < 0)
-        return strlen(p);
+        return str_len(p);
 
-    fputs(p, outfp);
+    str_cpy(outfp, p);
 
     return 0;
 }
@@ -922,7 +882,7 @@ cell *list_append(cell *a, cell *b)
 static int eqv(cell *a, cell *b)
 {
     if (isstring(a) && isstring(b))
-        return (strvalue(a) == strvalue(b) || !strcmp(strvalue(a), strvalue(b)));
+        return str_eq(string(a), string(b));
     else if (isexact(a) && isexact(b))
         return ivalue(a) == ivalue(b);
     else if (isinexact(a) && isinexact(b))
@@ -1297,11 +1257,6 @@ static void Eval_Cycle(opcode operator)
     case OP_LOAD: /* load */
         if (!isstring(car(args)))
             Error_0("load -- argument is not string");
-
-        if (line)
-            free(line);
-
-        line = (char *)malloc(LINESIZE * sizeof(char));
 
         clearinput();
 
@@ -2283,7 +2238,8 @@ static void Eval_Cycle(opcode operator)
         radix = 0;
 
         if (isstring(x)) {
-            char *end, *str = strvalue(x);
+            char *end;
+            const char *str = strvalue(x);
 
             if (*str == 0)
                 s_return(F);
@@ -2542,20 +2498,20 @@ static void Eval_Cycle(opcode operator)
 
     case OP_STRING: /* string */
         v = list_length(args);
-        x = mk_empty_string(v, '\0');
 
         for (y = args, v = 0; y != NIL; y = cdr(y), v++) {
             if (ischar(car(y)))
-                strvalue(x)[v] = cvalue(car(y));
+                strbuf[v] = cvalue(car(y));
             else
                 Error_1("string argument not character:", car(y));
         }
-        s_return(x);
+        strbuf[v] = '\0';
+        s_return(mk_string(strbuf));
 
     case OP_STRING_LENGTH: /* string-length */
         x = car(args);
         if (isstring(x))
-            s_return(mk_exact(strlen(strvalue(x))));
+            s_return(mk_exact(str_len(string(x))));
         Error_0("string-length argument not a string");
 
     case OP_STRING_REF: /* string-ref */
@@ -2563,7 +2519,7 @@ static void Eval_Cycle(opcode operator)
         y = cadr(args);
         if (isstring(x) && isexact(y)) {
             v = ivalue(y);
-            if (v >= 0 && v < (long)strlen(strvalue(x)))
+            if (v >= 0 && v < (long)str_len(string(x)))
                 s_return(mk_character(strvalue(x)[v]));
         }
         Error_1("Bad index into string :", y);
@@ -3288,9 +3244,6 @@ static void init_scheme()
 {
     if (alloc_cellseg(FIRST_CELLSEGS) != FIRST_CELLSEGS)
         fatal_error("Unable to allocate initial cell segments");
-
-    if (!alloc_strseg(1))
-        fatal_error("Unable to allocate initial string segments");
 #ifdef VERBOSE
     gc_verbose = 1;
 #else

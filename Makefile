@@ -10,7 +10,7 @@ CFLAGS = -Os -s -Wall -Wl,-z,norelro -DNDEBUG -lm
 all : yocto
 
 yocto : yocto.c yocto.h yocto-lexer.c yocto-parser.c Makefile
-	$(CC) $(CFLAGS) -o yocto yocto-lexer.c yocto-parser.c linenoise/linenoise.c yocto.c
+	$(CC) $(CFLAGS) -o yocto yocto-lexer.c yocto-parser.c linenoise/linenoise.c str/str.c utf8.c yocto.c
 
 yocto-lexer.c : yocto-lexer.re
 	re2c -i -o yocto-lexer.c yocto-lexer.re
@@ -18,7 +18,7 @@ yocto-lexer.c : yocto-lexer.re
 yocto-parser.c : lemon yocto-parser.y
 	./lemon -q -l yocto-parser.y
 
-lemon : lemon.c
+lemon : lemon.c lempar.c
 	$(CC) -o lemon lemon.c
 
 clean :

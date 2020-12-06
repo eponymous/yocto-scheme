@@ -17,22 +17,27 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #include "yocto.h"
 #include "yocto-parser.h"
 #include "linenoise/linenoise.h"
+#include "utf8.h"
 
 extern cell *T;
 extern cell *F;
 
-static char *yytoken;
-static char *yycursor;
-static char *yylimit;
+static unsigned char *yytoken;
+static unsigned char *yycursor;
+static unsigned char *yylimit;
+
+static str line;    /* input buffer */
 
 /* clear input buffer */
 void clearinput()
 {
-    yycursor = yylimit = yytoken = line;
+    str_clear(&line);
+    yycursor = yylimit = yytoken = NULL;
 }
 
 /* back to standard input */
@@ -44,66 +49,54 @@ void flushinput()
         is_interactive = 1;
     }
 
-    if (line) {
-        free(line);
-        line = NULL;
-    }
-
     clearinput();
 }
 
 static void yyfill(int need)
 {
     if (yycursor >= yylimit) {  /* input buffer is empty */
-        if (infp != stdin && !feof(infp)) {
-            int free = yytoken - line;
-            memmove(line, yytoken, yylimit - yytoken);
-            yylimit  -= free;
-            yycursor -= free;
-            yytoken  -= free;
-
-            while(yylimit < line + LINESIZE) {
-                int c = fgetc(infp);
-                *yylimit++ = (c == EOF ? '\0' : c);
-
-                if (c == EOF)
-                    break;
-            }
-
-            if ((yylimit - line) < need) {
-                line[yylimit - line] = '\0';
+        if (infp != stdin && str_is_empty(line)) {
+            if (str_from_stream(&line, infp)) {
+                sprintf(strbuf, "unable to open input file");
+                error(strbuf);
             }
         } else {
             flushinput();
 
-            if ((line = linenoise(PROMPT)) == NULL) {
+            line = str_acquire(linenoise(PROMPT));
+
+            if (str_is_empty(line)) {
                 printf("\n");
                 exit(0);
             } else {
-                linenoiseHistoryAdd(line);
+                linenoiseHistoryAdd(str_ptr(line));
             }
-
-            yycursor = yytoken = line;
-            yylimit = line + strlen(line) + 1;
         }
+
+        yycursor = yytoken = (unsigned char *)str_ptr(line);
+        yylimit = (unsigned char *)str_end(line) + 1;
     }
 }
+
+/*!include:re2c "unicode_categories.re" */
 
 int lex(cell **value)
 {
     int strlen;
-    char *yymarker;
+    unsigned char *yymarker;
     yytoken = yycursor;
 
 yy0:
     /*!re2c
 
-    re2c:indent:top      = 1;
-    re2c:define:YYCTYPE  = "char";
-    re2c:define:YYCURSOR = yycursor;
-    re2c:define:YYLIMIT  = yylimit;
-    re2c:define:YYMARKER = yymarker;
-    re2c:define:YYFILL   = yyfill;
+    re2c:indent:top           = 1;
+    re2c:define:YYCTYPE       = "unsigned char";
+    re2c:define:YYCURSOR      = yycursor;
+    re2c:define:YYLIMIT       = yylimit;
+    re2c:define:YYMARKER      = yymarker;
+    re2c:define:YYFILL        = yyfill;
+    re2c:flags:case-ranges    = 1;
+    re2c:flags:utf-8          = 1;
 
     "("                  { return TOK_LPAREN;    }
     ")"                  { return TOK_RPAREN;    }
@@ -147,7 +140,7 @@ yy0:
     '#\\return'          { *value = mk_character(0x0d);                                return TOK_CHARACTER; }
     '#\\space'           { *value = mk_character(0x20);                                return TOK_CHARACTER; }
     '#\\tab'             { *value = mk_character(0x09);                                return TOK_CHARACTER; }
-    "#\\x"[a-fA-F0-9]{2} { *value = mk_character(strtoul(yytoken + 3, &yycursor, 16)); return TOK_CHARACTER; }
+    "#\\x"[a-fA-F0-9]{2} { *value = mk_character(strtoul((const char *)yytoken + 3, (char **)&yycursor, 16)); return TOK_CHARACTER; }
     "#\\".               { *value = mk_character(*(yytoken + 2));                      return TOK_CHARACTER; }
 
     digit_2              = [01];
@@ -162,31 +155,31 @@ yy0:
 
     num_2                = "#b" digit_2+;
     num_2                {
-                             *value = mk_exact(strtoul(yytoken + 2, &yycursor, 2));
+                             *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 2));
                              return TOK_NUMBER;
                          }
 
     num_8                = "#o" sign? digit_8+;
     num_8                {
-                             *value = mk_exact(strtoul(yytoken + 2, &yycursor, 8));
+                             *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 8));
                              return TOK_NUMBER;
                          }
 
     float_10             = "#d"? decimal_10;
     float_10             {
-                             *value = mk_inexact(atof(*yytoken == '#' ? yytoken + 2 : yytoken));
+                             *value = mk_inexact(atof(*yytoken == '#' ? (const char *)yytoken + 2 : (char *)yytoken));
                              return TOK_NUMBER;
                          }
 
     integer_10           = "#d"? real_10;
     integer_10           {
-                             *value = mk_exact(atol(*yytoken == '#' ? yytoken + 2 : yytoken));
+                             *value = mk_exact(atol(*yytoken == '#' ? (const char *)yytoken + 2 : (char *)yytoken));
                              return TOK_NUMBER;
                          }
 
     num_16               = "#x" sign? digit_16+;
     num_16               {
-                             *value = mk_exact(strtoul(yytoken + 2, &yycursor, 16));
+                             *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 16));
                              return TOK_NUMBER;
                          }
 
@@ -199,19 +192,21 @@ yy0:
                                   error(strbuf);
                              }
 
-                             strncpy(strbuf, yytoken + 1, strlen);
+                             strncpy(strbuf, (const char *)yytoken + 1, strlen);
                              strbuf[strlen] = '\0';
                              *value = mk_string(strbuf);
                              return TOK_STRING;
                          }
 
-    letter               = [a-zA-Z];
+    id_start             = L | Nl ;
+    id_continue          = Mn | Mc | Nd | Pc | [\u200C\u200D];
+
     special_initial      = ('!' | '$' | '%' | '&' | '*' | '/' | ':' | '<' | '=' | '>' | '?' | '~' | '_' | '^');
     special_subsequent   = ('.' | '+' | '-');
     peculiar_identifier  = ('+' | '-' | '...');
 
-    initial              = letter | special_initial;
-    subsequent           = initial | digit_10 | special_subsequent;
+    initial              = id_start | special_initial;
+    subsequent           = initial | id_continue | digit_10 | special_subsequent;
     identifier           = (initial subsequent*) | peculiar_identifier;
 
     identifier           {
@@ -222,7 +217,7 @@ yy0:
                                   error(strbuf);
                              }
 
-                             strncpy(strbuf, yytoken, strlen);
+                             strncpy(strbuf, (const char *)yytoken, strlen);
                              strbuf[strlen] = '\0';
                              *value = mk_symbol(strbuf);
                              return TOK_SYMBOL;
@@ -241,7 +236,10 @@ yy0:
     eof                  { return 0; }
 
     *                    {
-                             sprintf(strbuf, "parse error illegal character: %c", *yycursor);
+                             int i = 0;
+                             uint32_t c = u8_nextchar((char *)yytoken, &i);
+                             i = sprintf(strbuf, "illegal character: ");
+                             u8_toutf8(strbuf+i, LINESIZE - i, &c, 1);
                              error(strbuf);
                          }
     */
