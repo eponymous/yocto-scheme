@@ -55,7 +55,7 @@ typedef struct cell {
 
 cell *mk_symbol(const char*);
 cell *mk_string(const char*);
-cell *mk_character(char);
+cell *mk_character(char32_t);
 cell *mk_exact(long);
 cell *mk_inexact(double);
 cell *mk_vector(int, cell*);

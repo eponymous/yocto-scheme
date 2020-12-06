@@ -98,6 +98,11 @@ yy0:
     re2c:flags:case-ranges    = 1;
     re2c:flags:utf-8          = 1;
 
+    digit_2              = [01];
+    digit_8              = [0-7];
+    digit_10             = [0-9];
+    digit_16             = [a-fA-F0-9];
+
     "("                  { return TOK_LPAREN;    }
     ")"                  { return TOK_RPAREN;    }
     "."                  { return TOK_DOT;       }
@@ -140,13 +145,10 @@ yy0:
     '#\\return'          { *value = mk_character(0x0d);                                return TOK_CHARACTER; }
     '#\\space'           { *value = mk_character(0x20);                                return TOK_CHARACTER; }
     '#\\tab'             { *value = mk_character(0x09);                                return TOK_CHARACTER; }
-    "#\\x"[a-fA-F0-9]{2} { *value = mk_character(strtoul((const char *)yytoken + 3, (char **)&yycursor, 16)); return TOK_CHARACTER; }
-    "#\\".               { *value = mk_character(*(yytoken + 2));                      return TOK_CHARACTER; }
-
-    digit_2              = [01];
-    digit_8              = [0-7];
-    digit_10             = [0-9];
-    digit_16             = [a-fA-F0-9];
+    "#\\x"digit_16{2,5}  { *value = mk_character(strtoul((const char *)yytoken + 3, (char **)&yycursor, 16)); return TOK_CHARACTER; }
+    "#\\".               { strlen = 0;
+                           *value = mk_character(u8_nextchar((char *)yytoken + 2, &strlen));
+                           return TOK_CHARACTER; }
 
     sign                 = [+-];
 

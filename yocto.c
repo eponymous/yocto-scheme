@@ -21,9 +21,11 @@
 #include <setjmp.h>
 #include <string.h>
 #include <stdlib.h>
+#include <wctype.h>
 #include <math.h>
 
 #include "yocto.h"
+#include "utf8.h"
 
 /*
  *  Basic memory allocation units
@@ -518,7 +520,7 @@ cell *mk_inexact(double num)
 }
 
 /* get character atom */
-cell *mk_character(char c)
+cell *mk_character(char32_t c)
 {
     cell *x = get_cell(NIL, NIL);
 
@@ -545,13 +547,17 @@ cell *mk_string(const char *s)
 }
 
 /* len is the length for the empty string in characters */
-static cell *mk_empty_string(int len, char fill)
+static cell *mk_empty_string(int len, char32_t fill)
 {
-    int i;
-
+    int i, offset = 0;
+/*
     for (i = 0; i < len; i++)
         strbuf[i] = fill;
     strbuf[len] = '\0';
+*/
+    for (i = 0; i < len; i++)
+        offset += u8_wc_toutf8(strbuf + offset, fill);
+    strbuf[offset] = '\0';
 
     return mk_string(strbuf);
 }
@@ -668,6 +674,7 @@ static void strunquote(char *p, const char *s)
 /* print atoms */
 static int printatom(cell *l, int f)
 {
+    int i;
     str p;
     
     if (l == NIL) {
@@ -690,7 +697,7 @@ static int printatom(cell *l, int f)
             p = str_ref(strbuf);
         }
     } else if (ischar(l)) {
-        char c = cvalue(l);
+        char32_t c = cvalue(l);
         if (!f) {
             strbuf[0] = c;
             strbuf[1] = 0;
@@ -725,7 +732,8 @@ static int printatom(cell *l, int f)
                     p = str_lit("#\\tab");
                     break;
                 default:
-                    sprintf(strbuf, "#\\%c", c);
+                    i = sprintf(strbuf, "#\\");
+                    u8_toutf8(strbuf+i, LINESIZE - i, &c, 1);
                     p = str_ref(strbuf);
                     break;
             }
@@ -2357,7 +2365,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci=? second argument not a char");
 
-        s_retbool(tolower(cvalue(x)) == tolower(cvalue(car(y))));
+        s_retbool(towlower(cvalue(x)) == towlower(cvalue(car(y))));
 
     case OP_CHAR_CI_LT: /* char-ci<? */
         x = car(args);
@@ -2368,7 +2376,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci<? second argument not a char");
 
-        s_retbool(tolower(cvalue(x)) < tolower(cvalue(car(y))));
+        s_retbool(towlower(cvalue(x)) < towlower(cvalue(car(y))));
 
     case OP_CHAR_CI_GT: /* char-ci>? */
         x = car(args);
@@ -2379,7 +2387,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci>? second argument not a char");
 
-        s_retbool(tolower(cvalue(x)) > tolower(cvalue(car(y))));
+        s_retbool(towlower(cvalue(x)) > towlower(cvalue(car(y))));
 
     case OP_CHAR_CI_LE: /* char-ci<=? */
         x = car(args);
@@ -2390,7 +2398,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci<=? second argument not a char");
 
-        s_retbool(tolower(cvalue(x)) <= tolower(cvalue(car(y))));
+        s_retbool(towlower(cvalue(x)) <= towlower(cvalue(car(y))));
 
     case OP_CHAR_CI_GE: /* char-ci>=? */
         x = car(args);
@@ -2401,7 +2409,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci>=? second argument not a char");
 
-        s_retbool(tolower(cvalue(x)) >= tolower(cvalue(car(y))));
+        s_retbool(towlower(cvalue(x)) >= towlower(cvalue(car(y))));
 
     case OP_CHAR_ALPHAP: /* char-alphabetic? */
         x = car(args);
@@ -2409,7 +2417,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-alphabetic? argument not a char");
 
-        s_retbool(isalpha(cvalue(x)));
+        s_retbool(iswalpha(cvalue(x)));
 
     case OP_CHAR_NUMBERP: /* char-numeric? */
         x = car(args);
@@ -2417,7 +2425,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-numeric? argument not a char");
 
-        s_retbool(isdigit(cvalue(x)));
+        s_retbool(iswdigit(cvalue(x)));
 
     case OP_CHAR_WSP: /* char-whitespace? */
         x = car(args);
@@ -2425,7 +2433,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-whitespace? argument not a char");
 
-        s_retbool(isspace(cvalue(x)));
+        s_retbool(iswspace(cvalue(x)));
 
     case OP_CHAR_UPPERP: /* char-upper-case? */
         x = car(args);
@@ -2433,7 +2441,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-upper-case? argument not a char");
 
-        s_retbool(isupper(cvalue(x)));
+        s_retbool(iswupper(cvalue(x)));
 
     case OP_CHAR_LOWERP: /* char-lower-case? */
         x = car(args);
@@ -2441,7 +2449,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-lower-case? argument not a char");
 
-        s_retbool(islower(cvalue(x)));
+        s_retbool(iswlower(cvalue(x)));
 
     case OP_CHAR_INT: /* char->integer */
         x = car(args);
@@ -2465,7 +2473,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-upcase argument not a char");
 
-        s_return(mk_character(toupper(cvalue(x))));
+        s_return(mk_character(towupper(cvalue(x))));
 
     case OP_CHAR_DOWNCASE: /* char-downcase */
         x = car(args);
@@ -2473,7 +2481,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-downcase argument not a char");
 
-        s_return(mk_character(tolower(cvalue(x))));
+        s_return(mk_character(towlower(cvalue(x))));
 
     case OP_STRINGP: /* string? */
         s_retbool(isstring(car(args)));
