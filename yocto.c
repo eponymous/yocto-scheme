@@ -2520,7 +2520,7 @@ static void Eval_Cycle(opcode operator)
     case OP_STRING_LENGTH: /* string-length */
         x = car(args);
         if (isstring(x))
-            s_return(mk_exact(str_len(string(x))));
+            s_return(mk_exact(u8_strlen(strvalue(x))));
         Error_0("string-length argument not a string");
 
     case OP_STRING_REF: /* string-ref */
@@ -2528,8 +2528,17 @@ static void Eval_Cycle(opcode operator)
         y = cadr(args);
         if (isstring(x) && isexact(y)) {
             v = ivalue(y);
-            if (v >= 0 && v < (long)str_len(string(x)))
-                s_return(mk_character(strvalue(x)[v]));
+
+            if (v >= 0 && v < u8_strlen(strvalue(x))) {
+                uint32_t c;
+                int i = 0;
+
+                for (int index = 0; index <= v; index++) {
+                    c = u8_nextchar(strvalue(x), &i);
+                }
+
+                s_return(mk_character(c));
+            }
         }
         Error_1("Bad index into string :", y);
 
