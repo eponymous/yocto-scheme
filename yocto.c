@@ -246,7 +246,7 @@ static void gc(cell *a, cell *b)
     long j;
 
     if (gc_verbose)
-        printf("gc...\n");
+        printf("gc...");
 
     /* mark system globals */
     mark(oblist);
@@ -335,13 +335,14 @@ static cell *oblist_get_name(const char *name)
 /* search strlist by name */
 static cell *strlist_get_name(const char *name)
 {
-    cell *x;
+    cell **x= &strlist;
+    str n = str_ref(name);
 
-    for (x = strlist; x != NIL; x = cdr(x))
-        if (str_eq(str_ref(name), string(car(x))))
-            return car(x);
+    while (*x != NIL && !str_eq(n, string(car(*x)))) {
+        x = &cdr(*x);
+    }
 
-    return NIL;
+    return *x == NIL ? NIL : car(*x);
 }
 
 /* get new cell.  parameter a, b is marked by gc. */
