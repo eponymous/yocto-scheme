@@ -880,6 +880,7 @@ static cell *tail_append(cell *a, cell *b)
 cell *list_append(cell *a, cell *b)
 {
     cell *p = a;
+
     while (cdr(p) != NIL) {
         p = cdr(p);
     }
@@ -1165,6 +1166,23 @@ typedef enum {
     OP_STRING,
     OP_STRING_LENGTH,
     OP_STRING_REF,
+    OP_STRING_SET,
+    OP_STRING_EQ,
+    OP_STRING_CI_EQ,
+    OP_STRING_LT,
+    OP_STRING_CI_LT,
+    OP_STRING_GT,
+    OP_STRING_CI_GT,
+    OP_STRING_LE,
+    OP_STRING_CI_LE,
+    OP_STRING_GE,
+    OP_STRING_CI_GE,
+    OP_SUBSTRING,
+    OP_STRING_APPEND,
+    OP_STRING_LIST,
+    OP_LIST_STRING,
+    OP_STRING_FILL,
+    OP_STRING_COPY,
     OP_VECTORP,
     OP_MAKE_VECTOR,
     OP_VECTOR,
@@ -1257,10 +1275,12 @@ typedef enum {
 static void Eval_Cycle(opcode operator)
 {
     cell *x, *y, *value;
-    long v, radix, width = 0;
+    long v, start, end, radix, width = 0;
+    int index, i;
     int print_flag = 0;
     int token = 0;
     FILE *tmpfp = NULL;
+    str str_x, str_y;
 
     dispatch: switch (operator) {
     case OP_LOAD: /* load */
@@ -2506,15 +2526,20 @@ static void Eval_Cycle(opcode operator)
         }
 
     case OP_STRING: /* string */
-        v = list_length(args);
+        i = 0;
+        y = args;
 
-        for (y = args, v = 0; y != NIL; y = cdr(y), v++) {
-            if (ischar(car(y)))
-                strbuf[v] = cvalue(car(y));
-            else
-                Error_1("string argument not character:", car(y));
+        while (y != NIL) {
+            if (!ischar(car(y))) {
+                Error_1("list->string argument not a character: ", car(y));
+            }
+
+            i += u8_wc_toutf8(strbuf+i, cvalue(car(y)));
+
+            y = cdr(y);
         }
-        strbuf[v] = '\0';
+
+        strbuf[i] = '\0';
         s_return(mk_string(strbuf));
 
     case OP_STRING_LENGTH: /* string-length */
@@ -2526,14 +2551,16 @@ static void Eval_Cycle(opcode operator)
     case OP_STRING_REF: /* string-ref */
         x = car(args);
         y = cadr(args);
-        if (isstring(x) && isexact(y)) {
+        if (!isstring(x)) {
+            Error_0("string-ref argument not a string");
+        } else if (isexact(y)) {
             v = ivalue(y);
 
             if (v >= 0 && v < u8_strlen(strvalue(x))) {
                 uint32_t c;
-                int i = 0;
+                i = 0;
 
-                for (int index = 0; index <= v; index++) {
+                for (index = 0; index <= v; index++) {
                     c = u8_nextchar(strvalue(x), &i);
                 }
 
@@ -2541,6 +2568,413 @@ static void Eval_Cycle(opcode operator)
             }
         }
         Error_1("Bad index into string :", y);
+
+    case OP_STRING_SET: /* string-set! */
+        x = car(args);
+        y = cadr(args);
+
+        if (!isstring(x)) {
+            Error_0("string-set! argument not a string");
+        } else if (!isexact(y)) {
+            Error_1("string-set! argument not an index value :", y);
+        } else if (!ischar(caddr(args))) {
+            Error_1("string-set! argument not a character :", caddr(args));
+        }
+
+        index = ivalue(y);
+
+        if (index >= 0 && index < u8_strlen(strvalue(x))) {
+            uint32_t c = cvalue(caddr(args));
+            i = 0;
+
+            i = u8_offset(strvalue(x), index);
+
+            /* copy string up to index */
+            strncpy(strbuf, strvalue(x), i);
+
+            /* append replacement character */
+            start = i + u8_wc_toutf8(strbuf+i, c);
+            end = str_len(string(x))-i;
+
+            /* advance string past replaced character */
+            u8_inc(strvalue(x), &i);
+
+            /* copy rest of string */
+            strncpy(strbuf+start, strvalue(x)+i, end);
+            strbuf[start+end] = '\0';
+
+            str_cpy(&string(x), str_ref(strbuf));
+            s_return(x);
+        }
+
+        Error_1("Bad index into string :", y);
+
+    case OP_STRING_EQ: /* string=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string=? argument not a string: ", car(y));
+            } else if (!str_eq(string(x), string(car(y)))) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_CI_EQ: /* string-ci=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-ci=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string-ci=? argument not a string: ", car(y));
+            } else if (!str_eq_ci(string(x), string(car(y)))) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_LT: /* string<? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string<? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string<? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) >= 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_CI_LT: /* string-ci<? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-ci<? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string-ci<? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) >= 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_GT: /* string>? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string>? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string>? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) <= 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_CI_GT: /* string-ci>? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-ci>? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string-ci>? argument not a string: ", car(y));
+            } else if (str_cmp_ci(string(x), string(car(y))) <= 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_LE: /* string<=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string<=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string<=? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) > 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_CI_LE: /* string-ci<=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-ci<=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string-ci<=? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) > 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_GE: /* string>=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string>=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string>=? argument not a string: ", car(y));
+            } else if (str_cmp(string(x), string(car(y))) < 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_STRING_CI_GE: /* string-ci>=? */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-ci>=? argument not a string: ", x);
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                Error_1("string-ci>=? argument not a string: ", car(y));
+            } else if (str_cmp_ci(string(x), string(car(y))) < 0) {
+                s_retbool(0);
+            }
+            x = car(y);
+            y = cdr(y);
+        }
+
+        s_retbool(1);
+
+    case OP_SUBSTRING: /* substring */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("substring argument not a string: ", x);
+
+        if (!isnumber(car(y)) || num_ivalue(car(y)) < 0 || num_ivalue(car(y)) > u8_strlen(strvalue(x))) {
+            Error_1("substring 'start' argument not a valid index: ", car(y));
+        }
+
+        start = num_ivalue(car(y));
+        y = cdr(y);
+
+        if (!isnumber(car(y)) || num_ivalue(car(y)) < start || num_ivalue(car(y)) > u8_strlen(strvalue(x))) {
+            Error_1("substring 'end' argument not a valid index: ", car(y));
+        }
+
+        end = num_ivalue(car(y));
+
+        i = 0;
+        for (index = 0; index < start; index++) {
+            u8_inc(strvalue(x), &i);
+        }
+
+        for (index = 0; index < end - start; index++) {
+            uint32_t c = u8_nextchar((char *)strvalue(x), &i);
+            u8_toutf8(strbuf+index, LINESIZE, &c, 1);
+        }
+
+        s_return(mk_string(strbuf));
+
+    case OP_STRING_APPEND: /* string-append */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string-append argument not a string: ", x);
+
+        str_cpy(&str_x, string(x));
+
+        while (y != NIL) {
+            if (!isstring(car(y))) {
+                str_clear(&str_x);
+                Error_1("string-append argument not a string: ", car(y));
+            }
+
+            str_swap(&str_x, &str_y);
+
+            str_cat(&str_x, str_y, string(car(y)));
+            y = cdr(y);
+        }
+
+        x = mk_string(str_ptr(str_x));
+        str_clear(&str_x);
+        str_clear(&str_y);
+        s_return(x);
+
+    case OP_STRING_LIST: /* string->list */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x))
+            Error_1("string->list argument not a string: ", x);
+
+        str_x = str_ref(string(x));
+        v = u8_strlen(str_ptr(str_x));
+        x = NIL;
+
+        if (y == NIL) {
+            start = 0;
+            end = v;
+        } else if (isnumber(car(y))) {
+           start = num_ivalue(car(y));
+           if (start < 0 || start > v) {
+               Error_1("string->list 'start' argument not a valid index: ", car(y));
+           }
+           y = cdr(y);
+        } else {
+            Error_1("string->list 'start' argument not a valid index: ", car(y));
+        }
+
+        if (y == NIL) {
+            end = v;
+        } else if (isnumber(car(y))) {
+           end = num_ivalue(car(y));
+           end = (end >= v ? v-1 : end);
+           if (end < start) {
+               s_return(NIL);
+           }
+        } else {
+            Error_1("string->list 'start' argument not a valid index: ", car(y));
+        }
+
+        i = 0;
+
+        for (index = 0; index < start; index++) {
+            u8_inc(str_ptr(str_x), &i);
+        }
+
+        for (index = 0; index < end; index++) {
+            uint32_t c = u8_nextchar((char *)str_ptr(str_x), &i);
+            if (x == NIL)
+                x = cons(mk_character(c), NIL);
+            else
+                list_append(x, cons(mk_character(c), NIL));
+        }
+
+        s_return(x);
+
+    case OP_LIST_STRING: /* list->string */
+        i = 0;
+        y = car(args);
+
+        while (y != NIL) {
+            if (!ischar(car(y))) {
+                Error_1("list->string argument not a character: ", car(y));
+            }
+
+            i += u8_wc_toutf8(strbuf+i, cvalue(car(y)));
+
+            y = cdr(y);
+        }
+
+        strbuf[i] = '\0';
+        s_return(mk_string(strbuf));
+
+    case OP_STRING_COPY: /* string-copy */
+        x = car(args);
+        y = cdr(args);
+
+        str_x = str_ref(string(x));
+        v = u8_strlen(str_ptr(str_x));
+
+        if (!isstring(x))
+            Error_1("string-copy argument not a string: ", x);
+
+        if (y == NIL) {
+            start = 0;
+            end = v;
+        } else if (isnumber(car(y))) {
+            start = num_ivalue(car(y));
+            if (start < 0 || start > v) {
+                Error_1("string->copy 'start' argument not a valid index: ", car(y));
+            }
+            y = cdr(y);
+        } else {
+            Error_1("string->copy 'start' argument not a valid index: ", car(y));
+        }
+
+        if (y == NIL) {
+            end = v;
+        } else if (isnumber(car(y))) {
+            end = num_ivalue(car(y));
+            end = (end >= v ? v-1 : end);
+            if (end < start) {
+                s_return(NIL);
+            }
+        } else {
+            Error_1("string->copy 'start' argument not a valid index: ", car(y));
+        }
+
+        i = 0;
+        for (index = 0; index < start; index++) {
+            u8_inc(strvalue(x), &i);
+        }
+
+        for (index = 0; index < end - start; index++) {
+            uint32_t c = u8_nextchar((char *)strvalue(x), &i);
+            u8_toutf8(strbuf+index, LINESIZE, &c, 1);
+        }
+
+        s_return(mk_string(strbuf));
+
+    case OP_STRING_FILL: /* string-fill! */
+        s_return(F);
 
     case OP_VECTORP: /* vector? */
         s_retbool(isvector(car(args)));
@@ -3155,23 +3589,23 @@ static void init_procs()
     mk_proc(OP_STRING,             "string");
     mk_proc(OP_STRING_LENGTH,      "string-length");
     mk_proc(OP_STRING_REF,         "string-ref");
-    // "string-set!"
-    // "string=?"
-    // "string-ci=?"
-    // "string<?"
-    // "string>?"
-    // "string<=?"
-    // "string>=?"
-    // "string-ci<?"
-    // "string-ci>?"
-    // "string-ci<=?"
-    // "string-ci>=?"
-    // "substring"
-    // "string-append"
-    // "string->list"
-    // "list->string"
-    // "string-copy"
-    // "string-fill!"
+    mk_proc(OP_STRING_SET,         "string-set!");
+    mk_proc(OP_STRING_EQ,          "string=?");
+    mk_proc(OP_STRING_CI_EQ,       "string-ci=?");
+    mk_proc(OP_STRING_LT,          "string<?");
+    mk_proc(OP_STRING_CI_LT,       "string-ci<?");
+    mk_proc(OP_STRING_GT,          "string>?");
+    mk_proc(OP_STRING_CI_GT,       "string-ci>?");
+    mk_proc(OP_STRING_LE,          "string<=?");
+    mk_proc(OP_STRING_CI_LE,       "string-ci<=?");
+    mk_proc(OP_STRING_GE,          "string>=?");
+    mk_proc(OP_STRING_CI_GE,       "string-ci>=?");
+    mk_proc(OP_SUBSTRING,          "substring");
+    mk_proc(OP_STRING_APPEND,      "string-append");
+    mk_proc(OP_STRING_LIST,        "string->list");
+    mk_proc(OP_LIST_STRING,        "list->string");
+    mk_proc(OP_STRING_COPY,        "string-copy");
+    mk_proc(OP_STRING_FILL,        "string-fill!");
 
     /**** 6.8. Vectors ****/
     mk_proc(OP_VECTORP,            "vector?");
