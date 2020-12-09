@@ -2552,13 +2552,7 @@ static void Eval_Cycle(opcode operator)
     case OP_STRING_LENGTH: /* string-length */
         x = car(args);
         if (isstring(x)) {
-            // s_return(mk_exact(u8_strlen(strvalue(x))));
-            char32_t c;
-            i = 0;
-
-            for_each_codepoint(c, string(x))
-	        i++;
-            s_return(mk_exact(i));
+            s_return(mk_exact(u8_strlen(strvalue(x))));
         }
 
         Error_0("string-length argument not a string");

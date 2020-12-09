@@ -210,14 +210,22 @@ int u8_strlen(const char *s)
 uint32_t u8_nextchar(const char *s, int *i)
 {
     uint32_t ch = 0;
-    int sz = 0;
 
-    do {
-        ch <<= 6;
-        ch += (unsigned char)s[(*i)++];
-        sz++;
-    } while (s[*i] && !isutf(s[*i]));
-    ch -= offsetsFromUTF8[sz-1];
+    if ((s[(*i)] & 0x80) == 0) {
+        ch = (unsigned char)s[(*i)++];
+    } else if ((s[(*i)] & 0xE0) == 0xC0) {
+        ch = ((unsigned char)(s[(*i)++] & 0x1F) << 6) |
+             ((unsigned char)(s[(*i)++] & 0x3F));
+    } else if ((s[(*i)] & 0xF0) == 0xE0) {
+        ch = ((unsigned char)(s[(*i)++] & 0x0F) << 12) |
+             ((unsigned char)(s[(*i)++] & 0x3F) << 6) |
+             ((unsigned char)(s[(*i)++] & 0x3F));
+    } else if ((s[(*i)] & 0xF8) == 0xF0) {
+        ch = ((unsigned char)(s[(*i)++] & 0x07) << 18) |
+             ((unsigned char)(s[(*i)++] & 0x3F) << 12) |
+             ((unsigned char)(s[(*i)++] & 0x3F) << 6) |
+             ((unsigned char)(s[(*i)++] & 0x3F));
+    }
 
     return ch;
 }
