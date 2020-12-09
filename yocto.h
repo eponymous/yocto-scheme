@@ -71,6 +71,7 @@ extern char strbuf[LINESIZE];
 
 extern FILE *infp;    /* input file */
 extern FILE *outfp;   /* output file */
+extern str in_filename;
 
 extern char is_interactive;
 

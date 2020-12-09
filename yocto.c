@@ -178,6 +178,7 @@ char is_interactive;
 
 FILE *infp;    /* input file */
 FILE *outfp;   /* output file */
+str in_filename;
 
 char strbuf[LINESIZE];
 
@@ -1295,6 +1296,9 @@ static void Eval_Cycle(opcode operator)
         if (is_interactive)
             fprintf(outfp, "loading %s...\n", strvalue(car(args)));
 
+        in_filename = str_ref(string(car(args)));
+        is_interactive = 0;
+/*
         if ((infp = fopen(strvalue(car(args)), "r")) == NULL) {
             infp = stdin;
             is_interactive = 1;
@@ -1302,7 +1306,7 @@ static void Eval_Cycle(opcode operator)
         } else {
             is_interactive = 0;
         }
-
+*/
         s_goto(OP_T0LVL);
 
     case OP_T0LVL: /* top level */
@@ -2547,8 +2551,16 @@ static void Eval_Cycle(opcode operator)
 
     case OP_STRING_LENGTH: /* string-length */
         x = car(args);
-        if (isstring(x))
-            s_return(mk_exact(u8_strlen(strvalue(x))));
+        if (isstring(x)) {
+            // s_return(mk_exact(u8_strlen(strvalue(x))));
+            char32_t c;
+            i = 0;
+
+            for_each_codepoint(c, string(x))
+	        i++;
+            s_return(mk_exact(i));
+        }
+
         Error_0("string-length argument not a string");
 
     case OP_STRING_REF: /* string-ref */
@@ -3420,6 +3432,7 @@ static void init_vars_global()
     infp = stdin;
     outfp = stdout;
     is_interactive = 0;
+    in_filename = str_null;
 
     /* init NIL */
     type(NIL) = (T_ATOM | MARK);

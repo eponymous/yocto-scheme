@@ -37,6 +37,7 @@ static str line;    /* input buffer */
 void clearinput()
 {
     str_clear(&line);
+    str_clear(&in_filename);
     yycursor = yylimit = yytoken = NULL;
 }
 
@@ -46,20 +47,22 @@ void flushinput()
     if (infp != stdin) {
         fclose(infp);
         infp = stdin;
-        is_interactive = 1;
     }
 
+    is_interactive = 1;
     clearinput();
 }
 
 static void yyfill(int need)
 {
     if (yycursor >= yylimit) {  /* input buffer is empty */
-        if (infp != stdin && str_is_empty(line)) {
-            if (str_from_stream(&line, infp)) {
-                sprintf(strbuf, "unable to open input file");
+        if (!str_is_empty(in_filename)) {
+            if (str_from_file(&line, str_ptr(in_filename))) {
+                sprintf(strbuf, "unable to open input file '%s'", str_ptr(in_filename));
                 error(strbuf);
             }
+
+            str_clear(&in_filename);
         } else {
             flushinput();
 
