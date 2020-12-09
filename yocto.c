@@ -27,6 +27,9 @@
 #include "utf8.h"
 #include "utf8-char-class.h"
 
+#include "linenoise/linenoise.h"
+#include "linenoise/encodings/utf8.h"
+
 /*
  *  Basic memory allocation units
  */
@@ -3702,6 +3705,10 @@ static void init_scheme()
     gc_verbose = 0;
 #endif
     init_globals();
+
+    linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen,
+                                  linenoiseUtf8NextCharLen,
+                                  linenoiseUtf8ReadCode);
 }
 
 /* ========== Main ========== */
