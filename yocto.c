@@ -21,11 +21,11 @@
 #include <setjmp.h>
 #include <string.h>
 #include <stdlib.h>
-#include <wctype.h>
 #include <math.h>
 
 #include "yocto.h"
 #include "utf8.h"
+#include "utf8-char-class.h"
 
 /*
  *  Basic memory allocation units
@@ -2386,7 +2386,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci=? second argument not a char");
 
-        s_retbool(towlower(cvalue(x)) == towlower(cvalue(car(y))));
+        s_retbool(utf8_tolower(cvalue(x)) == utf8_tolower(cvalue(car(y))));
 
     case OP_CHAR_CI_LT: /* char-ci<? */
         x = car(args);
@@ -2397,7 +2397,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci<? second argument not a char");
 
-        s_retbool(towlower(cvalue(x)) < towlower(cvalue(car(y))));
+        s_retbool(utf8_tolower(cvalue(x)) < utf8_tolower(cvalue(car(y))));
 
     case OP_CHAR_CI_GT: /* char-ci>? */
         x = car(args);
@@ -2408,7 +2408,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci>? second argument not a char");
 
-        s_retbool(towlower(cvalue(x)) > towlower(cvalue(car(y))));
+        s_retbool(utf8_tolower(cvalue(x)) > utf8_tolower(cvalue(car(y))));
 
     case OP_CHAR_CI_LE: /* char-ci<=? */
         x = car(args);
@@ -2419,7 +2419,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci<=? second argument not a char");
 
-        s_retbool(towlower(cvalue(x)) <= towlower(cvalue(car(y))));
+        s_retbool(utf8_tolower(cvalue(x)) <= utf8_tolower(cvalue(car(y))));
 
     case OP_CHAR_CI_GE: /* char-ci>=? */
         x = car(args);
@@ -2430,7 +2430,7 @@ static void Eval_Cycle(opcode operator)
         else if (y == NIL || !ischar(car(y))) 
             Error_0("char-ci>=? second argument not a char");
 
-        s_retbool(towlower(cvalue(x)) >= towlower(cvalue(car(y))));
+        s_retbool(utf8_tolower(cvalue(x)) >= utf8_tolower(cvalue(car(y))));
 
     case OP_CHAR_ALPHAP: /* char-alphabetic? */
         x = car(args);
@@ -2438,7 +2438,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-alphabetic? argument not a char");
 
-        s_retbool(iswalpha(cvalue(x)));
+        s_retbool(utf8_isalpha(cvalue(x)));
 
     case OP_CHAR_NUMBERP: /* char-numeric? */
         x = car(args);
@@ -2446,7 +2446,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-numeric? argument not a char");
 
-        s_retbool(iswdigit(cvalue(x)));
+        s_retbool(utf8_isdigit(cvalue(x)));
 
     case OP_CHAR_WSP: /* char-whitespace? */
         x = car(args);
@@ -2454,7 +2454,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-whitespace? argument not a char");
 
-        s_retbool(iswspace(cvalue(x)));
+        s_retbool(utf8_isspace(cvalue(x)));
 
     case OP_CHAR_UPPERP: /* char-upper-case? */
         x = car(args);
@@ -2462,7 +2462,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-upper-case? argument not a char");
 
-        s_retbool(iswupper(cvalue(x)));
+        s_retbool(utf8_isupper(cvalue(x)));
 
     case OP_CHAR_LOWERP: /* char-lower-case? */
         x = car(args);
@@ -2470,7 +2470,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-lower-case? argument not a char");
 
-        s_retbool(iswlower(cvalue(x)));
+        s_retbool(utf8_islower(cvalue(x)));
 
     case OP_CHAR_INT: /* char->integer */
         x = car(args);
@@ -2494,7 +2494,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-upcase argument not a char");
 
-        s_return(mk_character(towupper(cvalue(x))));
+        s_return(mk_character(utf8_toupper(cvalue(x))));
 
     case OP_CHAR_DOWNCASE: /* char-downcase */
         x = car(args);
@@ -2502,7 +2502,7 @@ static void Eval_Cycle(opcode operator)
         if (!ischar(x))
             Error_0("char-downcase argument not a char");
 
-        s_return(mk_character(towlower(cvalue(x))));
+        s_return(mk_character(utf8_tolower(cvalue(x))));
 
     case OP_STRINGP: /* string? */
         s_retbool(isstring(car(args)));
