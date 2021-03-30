@@ -2493,7 +2493,7 @@ static void Eval_Cycle(opcode operator)
         if (!isexact(x))
             Error_0("integer->char argument not an integer");
 
-        s_return(mk_character((char)ivalue(x)));
+        s_return(mk_character((char32_t)ivalue(x)));
 
     case OP_CHAR_UPCASE: /* char-upcase */
         x = car(args);
