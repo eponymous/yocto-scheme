@@ -2,3 +2,6 @@
 	path = linenoise
 	url = https://github.com/yhirose/linenoise.git
 	branch = utf8-support
+[submodule "str"]
+	path = str
+	url = https://github.com/maxim2266/str.git
