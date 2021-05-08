@@ -244,6 +244,22 @@ E6:
     }
 }
 
+static void gc_strlist()
+{
+    cell **x= &strlist;
+
+    while (*x != NIL) {
+        if (ismark(car(*x))) {
+            setmark(*x);
+            x = &cdr(*x);
+        } else {
+            if (gc_verbose)
+                u8_printf("  freeing \"%s\" cell.\n", strvalue(car(*x)));
+            *x = cdr(*x);
+        }
+    }
+}
+
 /* garbage collection. parameter a, b is marked. */
 static void gc(cell *a, cell *b)
 {
@@ -252,11 +268,10 @@ static void gc(cell *a, cell *b)
     long j;
 
     if (gc_verbose)
-        printf("gc...");
+        printf("gc...\n");
 
     /* mark system globals */
     mark(oblist);
-    mark(strlist);
     mark(global_env);
 
     /* mark current registers */
@@ -270,6 +285,7 @@ static void gc(cell *a, cell *b)
     mark(b);
 
     /* garbage collect */
+    gc_strlist();
     clrmark(NIL);
     fcells = 0;
     free_cell = NIL;
@@ -288,7 +304,7 @@ static void gc(cell *a, cell *b)
     }
 
     if (gc_verbose)
-        printf(" done %ld cells are recovered.\n", fcells);
+        printf("  done %ld cells are recovered.\n", fcells);
 }
 
 /* allocate new cell segment */
