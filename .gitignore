@@ -4,6 +4,7 @@ yocto
 yocto-lexer.c
 yocto-parser.c
 yocto-parser.h
+*.o
 
 # random scheme files
 *.scm
