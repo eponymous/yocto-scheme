@@ -22,6 +22,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <locale.h>
+#include <time.h>
 
 #include "yocto.h"
 #include "utf8.h"
@@ -1186,6 +1188,8 @@ typedef enum {
     OP_STRING_LIST,
     OP_LIST_STRING,
     OP_STRING_FILL,
+    OP_STRING_NULL,
+    // OP_STRING_JOIN,
     OP_STRING_COPY,
     OP_VECTORP,
     OP_MAKE_VECTOR,
@@ -1210,6 +1214,13 @@ typedef enum {
     OP_DISPLAY,
     OP_NEWLINE,
     OP_WRITE_CHAR,
+    OP_LOCALE_SET,
+    OP_CLOCK,
+    OP_TIME,
+    OP_TIME_STRING,
+    OP_TIME_GMT,
+    OP_SEED,
+    OP_ROLL,
     OP_PEVAL,
     OP_ERR0,
     OP_ERR1,
@@ -2566,8 +2577,8 @@ static void Eval_Cycle(opcode operator)
             v = ivalue(y);
 
             if (v >= 0 && v < u8_strlen(strvalue(x))) {
-                uint32_t c;
                 i = 0;
+                uint32_t c = u8_nextchar(strvalue(x), &i);
 
                 for (index = 0; index <= v; index++) {
                     c = u8_nextchar(strvalue(x), &i);
@@ -2983,7 +2994,34 @@ static void Eval_Cycle(opcode operator)
         s_return(mk_string(strbuf));
 
     case OP_STRING_FILL: /* string-fill! */
+        x = car(args);
+        y = cdr(args);
+
+        if (!isstring(x)) {
+            Error_1("string-fill! argument not a string: ", x);
+        } else if (!ischar(car(y))) {
+            Error_1("string-fill! argument not a character :", y);
+        }
+
+        str_x = str_ref(string(x));
+        v = u8_strlen(str_ptr(str_x));
+
+        s_return(mk_empty_string(v, cvalue(car(y))));
+
+    case OP_STRING_NULL: /* string-null? */
+        x = car(args);
+
+        if (!isstring(x))
+            Error_0("string-null? argument not a string");
+        else
+            s_retbool(str_is_empty(string(x)));
+
+#if 0
+    case OP_STRING_JOIN: /* string-join */
+        x = car(args);
+        y = cdr(args);
         s_return(F);
+#endif
 
     case OP_VECTORP: /* vector? */
         s_retbool(isvector(car(args)));
@@ -3143,6 +3181,102 @@ static void Eval_Cycle(opcode operator)
             s_goto(OP_P0LIST);
         }
         Error_1("Argument to write-char not a char :", car(args));
+
+    case OP_LOCALE_SET: /* locale-set! */
+        x = car(args);
+        y = cadr(args);
+
+        if (isexact(x) && isstring(y)) {
+            char *c = NULL;
+
+            switch (ivalue(x)) {
+                case LC_ALL:
+                    c = setlocale(LC_ALL, strvalue(y));
+                    break;
+                case LC_COLLATE:
+                    c = setlocale(LC_COLLATE, strvalue(y));
+                    break;
+                case LC_CTYPE:
+                    c = setlocale(LC_CTYPE, strvalue(y));
+                    break;
+                case LC_MESSAGES:
+                    c = setlocale(LC_MESSAGES, strvalue(y));
+                    break;
+                case LC_MONETARY:
+                    c = setlocale(LC_MONETARY, strvalue(y));
+                    break;
+                case LC_NUMERIC:
+                    c = setlocale(LC_NUMERIC, strvalue(y));
+                    break;
+                case LC_TIME:
+                    c = setlocale(LC_TIME, strvalue(y));
+                    break;
+                default:
+                    Error_1("locale-set! invalid locale category :", x);
+            }
+
+            if (c == NULL) {
+                Error_1("locale-set! unable to set locale :", y);
+            } else {
+                s_return(mk_string(c));
+            }
+        }
+
+        Error_0("locale-set! arguments not a locale category and a locale name");
+
+    case OP_CLOCK: /* clock */
+        s_return(mk_exact(clock()));
+
+    case OP_TIME: /* time */
+        s_return(mk_exact(time(NULL)));
+
+    case OP_TIME_STRING: /* time->string */
+        x = car(args);
+        y = cadr(args);
+
+        if (isexact(x) && isstring(y)) {
+            if (strftime(strbuf, LINESIZE, strvalue(y), localtime(&ivalue(x))) == 0) {
+                Error_0("time->string failed");
+            }
+            s_return(mk_string(strbuf));
+        }
+
+        Error_0("time->string arguments not an exact number and a format string");
+
+    case OP_TIME_GMT: /* time->gmt */
+        if (isexact(car(args))) {
+            v = ivalue(car(args));
+            s_return(mk_exact(mktime(gmtime(&v))));
+        }
+        Error_1("Argument to time->gmt not an exact number :", car(args));
+
+    case OP_SEED: /* seed */
+        x = car(args);
+
+        if (isnumber(x)) {
+            srand(num_ivalue(x));
+        } else {
+            Error_1("seed argument not a number", x);
+        }
+        s_return(T);
+
+    case OP_ROLL: /* roll */
+        x = car(args);
+        y = cadr(args);
+
+        if (isnumber(x)) {
+            start = num_ivalue(x);
+            if (isnumber(y)) {
+                end = num_ivalue(y);
+                s_return(mk_exact((rand() % (end - start + 1)) + start));
+            } else if (y == NIL) {
+                s_return(mk_exact(rand() % start + 1));
+            }
+        } else if (x == NIL) {
+            s_return(mk_exact(rand()));
+        }
+
+        Error_0("roll arguments not numbers");
 
     case OP_PEVAL: /* eval */
         code = car(args);
@@ -3443,6 +3577,15 @@ static void init_vars_global()
     /* init global_env */
     global_env = cons(NIL, NIL);
 
+    /* init locale categories */
+    car(global_env) = cons(cons(mk_symbol("LC_ALL"),      mk_exact(LC_ALL)),      car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_COLLATE"),  mk_exact(LC_COLLATE)),  car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_CTYPE"),    mk_exact(LC_CTYPE)),    car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_MESSAGES"), mk_exact(LC_MESSAGES)), car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_MONETARY"), mk_exact(LC_MONETARY)), car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_NUMERIC"),  mk_exact(LC_NUMERIC)),  car(global_env));
+    car(global_env) = cons(cons(mk_symbol("LC_TIME"),     mk_exact(LC_TIME)),     car(global_env));
+
     /* init else */
     car(global_env) = cons(cons(mk_symbol("else"), T), car(global_env));
 
@@ -3617,6 +3760,9 @@ static void init_procs()
     mk_proc(OP_STRING_COPY,        "string-copy");
     mk_proc(OP_STRING_FILL,        "string-fill!");
 
+    mk_proc(OP_STRING_NULL,        "string-null?");
+    // mk_proc(OP_STRING_JOIN,        "string-join");
+
     /**** 6.8. Vectors ****/
     mk_proc(OP_VECTORP,            "vector?");
     mk_proc(OP_MAKE_VECTOR,        "make-vector");
@@ -3670,6 +3816,14 @@ static void init_procs()
     // "transcript-off"
 
     /**** non-standard functions ****/
+    mk_proc(OP_LOCALE_SET,         "locale-set!");
+    mk_proc(OP_CLOCK,              "clock");
+    mk_proc(OP_TIME,               "time");
+    mk_proc(OP_TIME_STRING,        "time->string");
+    mk_proc(OP_TIME_GMT,           "time->gmt");
+    mk_proc(OP_SEED,               "seed");
+    mk_proc(OP_ROLL,               "roll");
+
     mk_proc(OP_PEVAL,              "eval");
     mk_proc(OP_ERR0,               "error");
     mk_proc(OP_PUT,                "put");
