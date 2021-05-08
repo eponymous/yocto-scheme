@@ -168,7 +168,7 @@ static long fcells = 0;                       /* # of free cells */
 
 static char gc_verbose;                       /* if gc_verbose is not zero, print gc status */
 
-static jmp_buf error_jmp;
+jmp_buf error_jmp;
 
 static void *parser;
 
@@ -177,6 +177,7 @@ void *ParseAlloc(void *(*mallocProc)(size_t));
 void ParseFree(void *, void (*freeProc)(void*));
 
 char is_interactive;
+char is_runfile;
 
 FILE *infp;    /* input file */
 FILE *outfp;   /* output file */
@@ -3576,6 +3577,7 @@ static void init_vars_global()
     infp = stdin;
     outfp = stdout;
     is_interactive = 0;
+    is_runfile = 0;
     in_filename = str_null;
 
     /* init NIL */
@@ -3871,6 +3873,55 @@ static void init_globals()
     FEED_TO   = mk_symbol("=>");
 }
 
+static void completion(const char *buffer, linenoiseCompletions *lc)
+{
+    int len = strlen(buffer);
+
+    const char *start = buffer + len - 1;
+
+    while (start != buffer) {
+        int stop = 0;
+        switch (*(start-1)) {
+            case '"':
+                return;
+            case '(':
+            case ')':
+            case '\'':
+            case '`':
+            case ',':
+            case '@':
+            case ' ':
+                stop = 1;
+                break;
+            default:
+                start--;
+        }
+
+        if (stop) {
+            break;
+        }
+    }
+
+    str prefix = str_ref(start);
+
+    if (str_is_empty(prefix))
+        return;
+
+    str line_start = str_ref_chars(buffer, start - buffer);
+
+    cell **x= &oblist;
+    while (*x != NIL) {
+        str symbol = string(caar(*x));
+        x = &cdr(*x);
+
+        if (str_has_prefix(symbol, prefix)) {
+            str tmp = {};
+            str_cat(&tmp, line_start, symbol);
+            linenoiseAddCompletion(lc, str_ptr(tmp));
+        }
+    }
+}
+
 /* initialization of Mini-Scheme */
 static void init_scheme()
 {
@@ -3886,6 +3937,8 @@ static void init_scheme()
     linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen,
                                   linenoiseUtf8NextCharLen,
                                   linenoiseUtf8ReadCode);
+
+    linenoiseSetCompletionCallback(completion);
 }
 
 /* ========== Main ========== */
@@ -3900,6 +3953,7 @@ int main(int argc, char** argv)
         args = cons(mk_string(InitFile), NIL);
     } else {
         args = cons(mk_string(argv[1]), NIL);
+        is_runfile = 1;
     }
 
     /* setjmp() returns 0 when called directly so OP_LOAD

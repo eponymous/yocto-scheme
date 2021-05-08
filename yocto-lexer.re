@@ -18,6 +18,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <setjmp.h>
+#include <errno.h>
 
 #include "yocto.h"
 #include "yocto-parser.h"
@@ -26,6 +28,9 @@
 
 extern cell *T;
 extern cell *F;
+
+extern jmp_buf error_jmp;
+extern char is_runfile;
 
 static unsigned char *yytoken;
 static unsigned char *yycursor;
@@ -49,7 +54,11 @@ void flushinput()
         infp = stdin;
     }
 
-    is_interactive = 1;
+    if (is_runfile)
+        exit(0);
+    else
+        is_interactive = 1;
+
     clearinput();
 }
 
@@ -65,12 +74,16 @@ static void yyfill(int need)
             str_clear(&in_filename);
         } else {
             flushinput();
+            errno = 0;
 
             line = str_acquire(linenoise(PROMPT));
 
             if (str_is_empty(line)) {
-                printf("\n");
-                exit(0);
+                if (errno == EAGAIN) { // 'errno = EAGAIN' set by linenoise on ctrl-c
+                    longjmp(error_jmp, /* OP_T0LVL */ 1);
+                } else {
+                    exit(0);
+                }
             } else {
                 linenoiseHistoryAdd(str_ptr(line));
             }
@@ -158,31 +171,31 @@ yy0:
     real_10              = sign? digit_10+;
     decimal_10           = sign? (digit_10* "." digit_10+ | digit_10+ ".")([eE] real_10)?;
 
-    num_2                = "#b" digit_2+;
+    num_2                = '#b' digit_2+;
     num_2                {
                              *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 2));
                              return TOK_NUMBER;
                          }
 
-    num_8                = "#o" sign? digit_8+;
+    num_8                = '#o' sign? digit_8+;
     num_8                {
                              *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 8));
                              return TOK_NUMBER;
                          }
 
-    float_10             = "#d"? decimal_10;
+    float_10             = '#d'? decimal_10;
     float_10             {
                              *value = mk_inexact(atof(*yytoken == '#' ? (const char *)yytoken + 2 : (char *)yytoken));
                              return TOK_NUMBER;
                          }
 
-    integer_10           = "#d"? real_10;
+    integer_10           = '#d'? real_10;
     integer_10           {
                              *value = mk_exact(atol(*yytoken == '#' ? (const char *)yytoken + 2 : (char *)yytoken));
                              return TOK_NUMBER;
                          }
 
-    num_16               = "#x" sign? digit_16+;
+    num_16               = '#x' sign? digit_16+;
     num_16               {
                              *value = mk_exact(strtoul((const char *)yytoken + 2, (char **)&yycursor, 16));
                              return TOK_NUMBER;
@@ -203,7 +216,9 @@ yy0:
                              return TOK_STRING;
                          }
 
-    id_start             = L | Nl ;
+
+    // id_start             = L | Nl;
+    id_start             = Lu | Ll | Lt | Lm | Lo | Mn | Nl | No | Pd | Pc | Po | Sc | Sm | Sk | So;
     id_continue          = Mn | Mc | Nd | Pc | [\u200C\u200D];
 
     special_initial      = ('!' | '$' | '%' | '&' | '*' | '/' | ':' | '<' | '=' | '>' | '?' | '~' | '_' | '^');
