@@ -3071,11 +3071,11 @@ static void Eval_Cycle(opcode operator)
         y = cadr(args);
 
         if (y == NIL) {
-            str_y = str_null;
+            str_y = str_lit(" ");
         } else if (isstring(y)) {
             str_y = string(y);
         } else {
-            Error_1("string-join argument not a character :", y);
+            Error_1("string-join argument not a string :", y);
         }
 
         x = string_join(str_y, x);
