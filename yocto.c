@@ -1049,6 +1049,42 @@ int list_length(cell *p)
     }
 }
 
+static cell *string_join(const str sep, cell *src)
+{
+    int i = list_length(src);
+    cell *ret = NULL;
+    str *p = NULL;
+    str dest = str_null;
+
+    if (i == 0)
+        return mk_string("");
+    else if (i < 0)
+        return NULL;
+
+    p = (str*)malloc(i * sizeof(str));
+
+    if (p == NULL)
+        return NULL;
+
+    i = 0;
+    while (src != NIL) {
+        if (!isstring(car(src))) {
+            goto cleanup;
+        }
+        p[i++] = string(car(src));
+        src = cdr(src);
+    }
+
+    if (str_join_range(&dest, sep, p, i) == 0) {
+        ret = mk_string(str_ptr(dest));
+    }
+
+cleanup:
+    if (p)
+        free(p);
+    return ret;
+}
+
 /* ========== Evaluation Cycle ========== */
 
 /* operator code */
@@ -1206,7 +1242,7 @@ typedef enum {
     OP_LIST_STRING,
     OP_STRING_FILL,
     OP_STRING_NULL,
-    // OP_STRING_JOIN,
+    OP_STRING_JOIN,
     OP_STRING_COPY,
     OP_VECTORP,
     OP_MAKE_VECTOR,
@@ -2622,8 +2658,6 @@ static void Eval_Cycle(opcode operator)
 
         if (index >= 0 && index < u8_strlen(strvalue(x))) {
             uint32_t c = cvalue(caddr(args));
-            i = 0;
-
             i = u8_offset(strvalue(x), index);
 
             /* copy string up to index */
@@ -2640,8 +2674,7 @@ static void Eval_Cycle(opcode operator)
             strncpy(strbuf+start, strvalue(x)+i, end);
             strbuf[start+end] = '\0';
 
-            str_cpy(&string(x), str_ref(strbuf));
-            s_return(x);
+            s_return(mk_string(strbuf));
         }
 
         Error_1("Bad index into string :", y);
@@ -3033,12 +3066,25 @@ static void Eval_Cycle(opcode operator)
         else
             s_retbool(str_is_empty(string(x)));
 
-#if 0
     case OP_STRING_JOIN: /* string-join */
         x = car(args);
-        y = cdr(args);
-        s_return(F);
-#endif
+        y = cadr(args);
+
+        if (y == NIL) {
+            str_y = str_null;
+        } else if (isstring(y)) {
+            str_y = string(y);
+        } else {
+            Error_1("string-join argument not a character :", y);
+        }
+
+        x = string_join(str_y, x);
+
+        if (x == NULL) {
+            Error_0("string-join error");
+        }
+
+        s_return(x);
 
     case OP_VECTORP: /* vector? */
         s_retbool(isvector(car(args)));
@@ -3779,7 +3825,7 @@ static void init_procs()
     mk_proc(OP_STRING_FILL,        "string-fill!");
 
     mk_proc(OP_STRING_NULL,        "string-null?");
-    // mk_proc(OP_STRING_JOIN,        "string-join");
+    mk_proc(OP_STRING_JOIN,        "string-join");
 
     /**** 6.8. Vectors ****/
     mk_proc(OP_VECTORP,            "vector?");
